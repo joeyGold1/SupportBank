@@ -1,6 +1,6 @@
 import * as luxon from 'luxon';
 import { toNamespacedPath } from 'path/posix';
-import { isUndefined } from 'util';
+
 const csv = require('csv-parse');
 const fs = require('fs');
 
@@ -49,13 +49,13 @@ function processCSV(filename:string){
     });
 }
 
-
+//Main processing of program happens here.
 function mainProcess(rows:string[][]) {
      var people:Map<string,Person> = createPeople(rows);
      var transactions:Transaction[] = createTransactions(people,rows);
  }
 
-
+//Creates a map (dictionary) of each person, indexed by their name.
 function createPeople(rows:string[][]){
     let people: Map<string,Person> = new Map<string,Person>();
     let names: string[] = [];
@@ -72,12 +72,14 @@ function createPeople(rows:string[][]){
     return people;
 }
 
+//Creates a list of every transaction and stores a record of it with each relevant person's data.
 function createTransactions(people:Map<string,Person>,rows:string[][]){
     let transactions: Transaction[] = [];
     for (let i = 1; i<rows.length;i++){
         let date = luxon.DateTime.fromFormat(rows[i][0], "dd/MM/yyyy");
         let fromPerson = people.get(rows[i][1]);
         let toPerson = people.get(rows[i][2]);
+        //Compiler thinks these may be undefined. I don't think that is possible but this makes it happy.
         if (fromPerson== undefined || toPerson==undefined){
             console.log("Error: Person on traction " + i+ " does not exist")
         }
