@@ -1,4 +1,6 @@
+import { getLogger } from "log4js";
 import { DateTime } from "luxon";
+const logger = getLogger("JSONformatting.ts");
 
 type FromJSONTransaction = {
   Date: string;
@@ -18,6 +20,7 @@ export function convertJSONfileToStringArray(jsonFile: FromJSONTransaction[]) {
       jsonFile[i].Narrative,
       jsonFile[i].Amount.toString(),
     ]);
+    logger.info("Processing " + (i+1).toString() + "th transaction: " + rows[i+1].toString())
   }
   return rows;
 }
