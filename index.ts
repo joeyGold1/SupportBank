@@ -1,50 +1,42 @@
 import * as luxon from 'luxon';
 import { toNamespacedPath } from 'path/posix';
+
 const readline = require('readline');
 const csv = require('csv-parse');
 const fs = require('fs');
-
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
 });
 
+import { configure, getLogger } from "log4js";
+import { Person, Transaction } from './transactions';
 
-class Person {
-    name:string;
-    transactions: Transaction[] = [];
-    balance = 0;
-    constructor(name:string){
-        this.name = name;
+configure({
+    appenders: {
+        file: { type: 'fileSync', filename: 'logs/debug.log' }
+    },
+    categories: {
+        default: { appenders: ['file'], level: 'trace'}
     }
-    stringDetails(padding:number){
-        return (this.name.padEnd(padding))+(((this.balance/100).toString()).padStart(7))
-    }
-}
+});
 
-class Transaction {
-    date : luxon.DateTime;
-    from : Person;
-    to : Person;
-    narrative : String
-    amount : number;
-
-    constructor(date:luxon.DateTime,from:Person,to:Person,narrative:String,amount:number){
-        this.from = from;
-        this.to = to;
-        this.amount = amount;
-        this.date = date;
-        this.narrative = narrative;
-    }
-    stringDetails(padding:number){
-        return this.date.toLocaleString().padEnd(padding)+this.to.name.padEnd(padding)+this.from.name.padEnd(padding)+this.narrative.padEnd(padding*2)+(this.amount/100).toString().padStart(6)
-    }
-    
-}
+const logger = getLogger('index.ts');
 
 
 
-processCSV("Transactions2014.csv")
+
+
+
+
+
+
+
+
+
+
+
+processCSV("DodgyTransactions2015.csv")
 
 
 function processCSV(filename:string){
@@ -55,7 +47,7 @@ function processCSV(filename:string){
         rows.push(row);
     })
     .on('end', () => {
-        console.log('CSV file successfully processed');
+        logger.trace('CSV file successfully processed');
         mainProcess(rows);
     });
 }
@@ -64,80 +56,106 @@ function processCSV(filename:string){
 function mainProcess(rows:string[][]) {
      let people:Map<string,Person> = createPeople(rows);
      let transactions:Transaction[] = createTransactions(people,rows);
+     logger.trace("Getting user input. ")
      userInputLoop(people,transactions);
  }
 
+function listAll(people: Map<String,Person>){
+    let peopleArray = Array.from(people.values());
+    console.log("Name                  Balance")
+    for (let i=0;i<peopleArray.length;i++) {
+        console.log(peopleArray[i].stringDetails(22));
+    }
+}
 
- ////NEEDS FINISHING
-function userInputLoop(people: Map<string,Person>,transactions: Transaction[]){
-    rl.question('Enter command... ', (userInput:string) => {
-        if (userInput == "List All"){
-            let peopleArray = Array.from(people.values());
-            console.log("Name                  Balance")
-            for (let i=0;i<peopleArray.length;i++) {
-                console.log(peopleArray[i].stringDetails(22));
-            }
-        }
-        else if (userInput.startsWith("List ")){
-            let name:string = userInput.slice(5);
-            let person = people.get(name);
-            if (person == undefined) {
-                console.log("Name "+name+" is not in file. ");
-            }
-            else {
-                console.log("Date              To                From              "+"Narrative".padEnd(36)+"Amount");
+function listPerson(person:Person){
+    console.log("Date              To                From              "+"Narrative".padEnd(36)+"Amount");
                 for (let i = 0;i<person.transactions.length;i++){
                     console.log(person.transactions[i].stringDetails(18));
                 }
+}
+
+
+ //
+function userInputLoop(people: Map<string,Person>,transactions: Transaction[]){
+    rl.question('Enter command... ', (userInput:string) => {
+        logger.info("User has inputted '" + userInput+"'");
+        if (userInput == "List All"){
+            logger.trace("Entering 'List All' process. ");
+            listAll(people);
+        }
+        else if (userInput.startsWith("List ")){
+            logger.trace("Entering 'List Person' process. ")
+            let name:string = userInput.slice(5);
+            let person = people.get(name);
+            if (person == undefined) {
+                logger.error("User has entered name of person not in file. ")
+                console.log("Name "+name+" is not in file. ");
+            }
+            else {
+                logger.trace("Person found and entering process to list their details. ")
+                listPerson(person);
             }
         }
         else{
+            logger.error("User has entered an invalid command: '"+ userInput+"'")
             console.log("Invalid command, please enter 'List All' or 'List <name>'. ");
         }
-
-
-
         rl.close();
       });
 }
-    
-function outputTransactionDetails(transaction:Transaction){}
-
-
 
 
 //Creates a map (dictionary) of each person, indexed by their name.
 function createPeople(rows:string[][]){
+    logger.trace("Getting list of people from rows of file.")
     let people: Map<string,Person> = new Map<string,Person>();
     let names: string[] = [];
     for (let i = 1;i<rows.length;i++){
+        logger.info("Row "+ i.toString() +" having new names read from it. Names on row are " + rows[i][1] + " and " + rows[i][2] + ".")
         if (!(names.includes(rows[i][1]))){
+            logger.info("Newly found name is: " + rows[i][1])
             names.push(rows[i][1])
             people.set(rows[i][1], new Person(rows[i][1]))
         }
         if (!(names.includes(rows[i][2]))){
+            logger.info("Newly found name is: " + rows[i][2])
             names.push(rows[i][2])
             people.set(rows[i][2], new Person(rows[i][2]))
         }
     }
+    logger.trace("Map of people created. ")
     return people;
 }
 
 //Creates a list of every transaction and stores a record of it with each relevant person's data.
 function createTransactions(people:Map<string,Person>,rows:string[][]){
+    logger.trace("Getting information from transactions. ")
     let transactions: Transaction[] = [];
     let fromPerson;
     let toPerson;
     for (let i = 1; i<rows.length;i++){
+        logger.info("Row " + i.toString() + " is being read. Its contents is: " + rows[i].toString());
         let date = luxon.DateTime.fromFormat(rows[i][0], "dd/MM/yyyy");
+        if (!date.isValid){
+            logger.error("Date " + rows[i][0] + " on row " + i.toString() + " is in invalid format. ");
+            logger.warn("Incorrect date being used instead - 01/01/1970. ");
+            date = luxon.DateTime.fromFormat("01/01/1970", "dd/MM/yyyy" );
+        }
         fromPerson = people.get(rows[i][1]);
         toPerson = people.get(rows[i][2]);
         //Compiler thinks these may be undefined. I don't think that is possible but this makes it happy.
         if (fromPerson== undefined || toPerson==undefined){
             console.log("Error: Person on traction " + i+ " does not exist")
+            
         }
         else{
             let amount = Number(rows[i][4])*100;
+            if (isNaN(amount)){
+                logger.error("Row " + i.toString() + " contains an invalid amount: " + rows[i][4] + ". This has caused a NaN error. ");
+                logger.warn("Amount assumed to be 0. Update the file manually or update results manually. ")
+                amount = 0;
+            }
             let currentTransaction = new Transaction(date,fromPerson,toPerson,rows[i][3],amount);
             transactions.push(currentTransaction);
             fromPerson.balance -= amount;
