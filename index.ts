@@ -1,13 +1,14 @@
 import * as luxon from "luxon";
-import { toNamespacedPath } from "path/posix";
-const readline = require("readline");
-const csv = require("csv-parse");
-const fs = require("fs");
-
+import { resolve, toNamespacedPath } from "path/posix";
 import { configure, getLogger } from "log4js";
 import { Person, Transaction } from "./transactions";
-import { userInputLoop } from "./UserInputHandling";
+import { getUserInput, rl, userInputLoop } from "./UserInputHandling";
 import { convertJSONfileToStringArray } from "./JSONformatting";
+import { getRowsFromCSV } from "./CSVProcessing";
+//import { processXML } from "./XMLparsing";
+const readline = require("readline");
+const csv = require("csv-parse");
+const { finished } = require('promises');
 
 configure({
   appenders: {
@@ -21,30 +22,40 @@ configure({
 const logger = getLogger("index.ts");
 
 //Entry point to main program.
-const transactions2013 = require("./Transactions2013.json");
-mainProcess(convertJSONfileToStringArray(transactions2013));
-//processCSV("DodgyTransactions2015.csv")
+//const transactions2013 = require("./Transactions2013.json");
+//mainProcess(convertJSONfileToStringArray(transactions2013));
 
-//Reads input from csv file and converts it to a 2 dimensional array of strings.
-function processCSV(filename: string) {
-  var rows: string[][] = [];
-  fs.createReadStream(filename)
-    .pipe(csv())
-    .on("data", (row: string[]) => {
-      rows.push(row);
-    })
-    .on("end", () => {
-      logger.trace("CSV file successfully processed");
-      mainProcess(rows);
-    });
+
+program();
+
+
+async function program(){
+    let people: Map<string,Person> = new Map();
+    let userInput:string = await getUserInput("Enter file name: ");
+    logger.info("User has inputted '" + userInput + "'");
+    if (userInput.endsWith('.csv')){
+        people = await processCSV(userInput);
+    }
+    else if (userInput.endsWith('.json')){
+        people = await getPeople(convertJSONfileToStringArray(require("./"+userInput)));
+    }
+    userInputLoop(people);
 }
 
+
+//Starts the program for CSV processing.
+async function processCSV(filename:string){
+    let rows = await getRowsFromCSV(filename);
+    return getPeople(rows);
+ } 
+
+
 //Main processing of program happens here.
-function mainProcess(rows: string[][]) {
+function getPeople(rows: string[][]) {
   let people: Map<string, Person> = createPeople(rows);
   let transactions: Transaction[] = createTransactions(people, rows);
-  logger.trace("Getting user input. ");
-  userInputLoop(people, transactions);
+  return people;
+  
 }
 
 //Creates a map (dictionary) of each person, indexed by their name.
@@ -78,13 +89,8 @@ function createTransactions(people: Map<string, Person>, rows: string[][]) {
   }
   return transactions;
 }
-
-function createTransaction(
-  i: number,
-  rows: string[][],
-  people: Map<string, Person>,
-  transactions: Transaction[]
-) {
+//Creates a specific transaction from the raw data given as a 2D array of strings.
+function createTransaction(i: number, rows: string[][], people: Map<string, Person>, transactions: Transaction[]) {
   let fromPerson;
   let toPerson;
   logger.info("Row " + i.toString() + " is being read. Its contents is: " + rows[i].toString());
